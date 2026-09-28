@@ -51,8 +51,8 @@ ricardo-ai-agent 是一个面向 AI 应用开发的实战项目，通过接入�
 - 内置独立的 MCP 服务模块，支持以 stdio / SSE 两种模式启动
 - 可作为独立的 AI 工具服务被其他应用调用
 
-### 5. 恋爱大师 / 超级智能体
-- 基于 System Prompt 的角色扮演，实现恋爱咨询师人格
+### 5. AI智能面试官 / 超级智能体
+- 基于 System Prompt 的角色扮演，实现资深面试官人格
 - 超级智能体支持多步推理、工具编排、任务规划
 
 ## 项目结构
@@ -62,7 +62,7 @@ ricardo-ai-agent/
 ├── src/                    主工程
 │   ├── main/java/com/ricardo/yuaiagent/
 │   │   ├── agent/          AI 智能体（ReActAgent、ToolCallAgent、RicardoManus）
-│   │   ├── app/            应用入口（LoveApp）
+│   │   ├── app/            应用入口（InterviewApp）
 │   │   ├── chatmemory/     会话记忆（基于文件）
 │   │   ├── config/         配置类
 │   │   ├── controller/     接口层

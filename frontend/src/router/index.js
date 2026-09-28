@@ -7,16 +7,16 @@ const routes = [
     component: () => import('../views/Home.vue'),
     meta: {
       title: '首页 - 李嘉图AI超级智能体应用平台',
-      description: '李嘉图AI超级智能体应用平台提供AI恋爱大师和AI超级智能体服务，满足您的各种AI对话需求'
+      description: '李嘉图AI超级智能体应用平台提供AI智能面试官和AI超级智能体服务，满足您的各种AI对话需求'
     }
   },
   {
-    path: '/love-master',
-    name: 'LoveMaster',
-    component: () => import('../views/LoveMaster.vue'),
+    path: '/interview',
+    name: 'Interview',
+    component: () => import('../views/Interview.vue'),
     meta: {
-      title: 'AI恋爱大师 - 李嘉图AI超级智能体应用平台',
-      description: 'AI恋爱大师是李嘉图AI超级智能体应用平台的专业情感顾问，帮你解答各种恋爱问题，提供情感建议'
+      title: 'AI智能面试官 - 李嘉图AI超级智能体应用平台',
+      description: 'AI智能面试官是李嘉图AI超级智能体应用平台的资深程序员面试官，基于你的简历针对性地深挖项目经历，进行多轮模拟面试'
     }
   },
   {
