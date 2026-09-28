@@ -35,8 +35,9 @@ public class InterviewAppDocumentLoader {
             Resource[] resources = resourcePatternResolver.getResources("classpath:document/*.md");
             for (Resource resource : resources) {
                 String filename = resource.getFilename();
-                // 提取文档倒数第 3 和第 2 个字作为标签
-                String status = filename.substring(filename.length() - 6, filename.length() - 4);
+                log.info("正在加载知识库文档：{}", filename);
+                // 用「去掉 .md 扩展名的完整文件名」作为主题标签，替代原来“倒数抠 2 个字”的脆弱写法
+                String status = (filename == null || filename.isBlank()) ? "未分类" : filename.replaceAll("\\.md$", "");
                 MarkdownDocumentReaderConfig config = MarkdownDocumentReaderConfig.builder()
                         .withHorizontalRuleCreateDocument(true)
                         .withIncludeCodeBlock(false)

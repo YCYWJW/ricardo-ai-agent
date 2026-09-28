@@ -26,8 +26,9 @@ public class InterviewAppRagCloudAdvisorConfig {
         DashScopeApi dashScopeApi = DashScopeApi.builder()
                 .apiKey(dashScopeApiKey)
                 .build();
-        // 注意：这里的索引名是阿里云百炼后台的知识库索引名，先在后台改成面试官相关内容后，再同步修改这里
-        final String KNOWLEDGE_INDEX = "恋爱大师";
+        // 注意：此索引名对应阿里云百炼后台创建的知识库索引，需先在后台建好同名索引并导入面试题，
+        // 再取消 InterviewApp#doChatWithRag 里被注释掉的 interviewAppRagCloudAdvisor 行（第 169 行）启用
+        final String KNOWLEDGE_INDEX = "Java面试题库";
         DocumentRetriever dashScopeDocumentRetriever = new DashScopeDocumentRetriever(dashScopeApi,
                 DashScopeDocumentRetrieverOptions.builder()
                         .withIndexName(KNOWLEDGE_INDEX)

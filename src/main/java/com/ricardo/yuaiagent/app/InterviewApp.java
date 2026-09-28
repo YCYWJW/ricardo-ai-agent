@@ -172,7 +172,7 @@ public class InterviewApp {
                 // 应用自定义的 RAG 检索增强服务（文档查询器 + 上下文增强器）
 //                .advisors(
 //                        InterviewAppRagCustomAdvisorFactory.createInterviewAppRagCustomAdvisor(
-//                                interviewAppVectorStore, "单身"
+//                                interviewAppVectorStore, "Java基础与并发面试题"
 //                        )
 //                )
                 .call()

@@ -11,8 +11,9 @@ public class InterviewAppContextualQueryAugmenterFactory {
     public static ContextualQueryAugmenter createInstance() {
         PromptTemplate emptyContextPromptTemplate = new PromptTemplate("""
                 你应该输出下面的内容：
-                抱歉，我只能回答恋爱相关的问题，别的没办法帮到您哦，
-                有问题可以联系项目维护者
+                抱歉，我是一名专注于 Java 后端领域的 AI 面试官，
+                主要帮助你进行模拟面试、技术问题答疑和面试复盘，
+                超出这个范围的问题我暂时帮不上忙哦。有问题可以联系项目维护者。
                 """);
         return ContextualQueryAugmenter.builder()
                 .allowEmptyContext(false)
