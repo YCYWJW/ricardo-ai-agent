@@ -3,9 +3,25 @@
     <!-- 聊天记录区域 -->
     <div class="chat-messages" ref="messagesContainer">
       <div v-for="(msg, index) in messages" :key="index" class="message-wrapper">
+        <!-- 思考链（仅 AI 消息且存在步骤时显示；默认折叠，进行中才自动展开） -->
+        <div v-if="!msg.isUser && msg.steps && msg.steps.length > 0" class="thinking-panel">
+          <div class="thinking-header" @click="toggleThinking(index)">
+            <span class="thinking-icon">🧠</span>
+            <span class="thinking-title">思考链</span>
+            <span class="thinking-count">{{ msg.steps.length }} 步</span>
+            <span class="thinking-chevron" :class="{ expanded: isThinkingExpanded(msg, index) }">▾</span>
+          </div>
+          <div v-show="isThinkingExpanded(msg, index)" class="thinking-body">
+            <div v-for="(step, si) in msg.steps" :key="si" class="thinking-step">
+              <span class="step-dot" :class="isStepRunning(si, msg, index) ? 'running' : 'done'"></span>
+              <span class="step-text">{{ step.content }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- AI消息 -->
-        <div v-if="!msg.isUser" 
-             class="message ai-message" 
+        <div v-if="!msg.isUser"
+             class="message ai-message"
              :class="[msg.type]">
           <div class="avatar ai-avatar">
             <AiAvatarFallback :type="aiType" />
@@ -75,6 +91,30 @@ const emit = defineEmits(['send-message'])
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
+
+// 思考链手动展开/收起记录（key = 消息下标）
+const manuallyToggled = reactive({})
+
+// 某条消息的思考链是否展开：
+// 默认规则「默认折叠，进行中才展开」——仅当正在连接、且是最后一条消息时自动展开；
+// 用户点过标题后，以用户的手动选择为准
+const isThinkingExpanded = (msg, index) => {
+  if (Object.prototype.hasOwnProperty.call(manuallyToggled, index)) {
+    return manuallyToggled[index]
+  }
+  return props.connectionStatus === 'connecting' && index === props.messages.length - 1
+}
+
+const toggleThinking = (index) => {
+  manuallyToggled[index] = !isThinkingExpanded(props.messages[index], index)
+}
+
+// 该步骤是否「进行中」：正在连接、且是最后一条消息的最后一个步骤 → 显示转圈，否则显示完成
+const isStepRunning = (stepIndex, msg, index) => {
+  return props.connectionStatus === 'connecting'
+    && index === props.messages.length - 1
+    && stepIndex === msg.steps.length - 1
+}
 
 // 根据AI类型选择不同头像
 const aiAvatar = computed(() => {
@@ -318,7 +358,12 @@ onMounted(() => {
   .message {
     max-width: 95%;
   }
-  
+
+  .thinking-panel {
+    max-width: 95%;
+    margin-left: 40px;
+  }
+
   .message-content {
     font-size: 15px;
   }
@@ -388,5 +433,93 @@ onMounted(() => {
 
 .ai-message + .ai-message .message-bubble {
   border-top-left-radius: 10px;
+}
+
+/* ===== 思考链面板 ===== */
+.thinking-panel {
+  max-width: 85%;
+  margin-left: 44px; /* 与 AI 头像右侧气泡对齐 */
+  margin-bottom: 6px;
+  background-color: #f0f6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #1e40af;
+  user-select: none;
+}
+
+.thinking-title {
+  font-weight: 600;
+}
+
+.thinking-count {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.thinking-chevron {
+  margin-left: auto;
+  color: #64748b;
+  transition: transform 0.2s;
+}
+
+.thinking-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.thinking-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 12px 10px 12px;
+}
+
+.thinking-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 7px;
+}
+
+.step-dot.done {
+  background-color: #22c55e;
+}
+
+.step-dot.running {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  background: transparent;
+  border: 2px solid #2563eb;
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.step-text {
+  flex: 1;
 }
 </style> 

@@ -73,13 +73,58 @@ const generateChatId = () => {
   return 'interview_' + Math.random().toString(36).substring(2, 10)
 }
 
-// 添加消息到列表
-const addMessage = (content, isUser) => {
+// 添加消息到列表（AI 消息自带一个空思考链 steps，用于承载 thought 步骤）
+const addMessage = (content, isUser, steps = []) => {
   messages.value.push({
     content,
     isUser,
+    steps,
     time: new Date().getTime()
   })
+}
+
+// 把正文文本追加到指定的 AI 消息
+const appendTextToMessage = (index, text) => {
+  if (index < messages.value.length && text) {
+    messages.value[index].content += text
+  }
+}
+
+// 把一个思考步骤追加到指定 AI 消息的思考链
+const appendThinkingStep = (index, type, content) => {
+  if (index < messages.value.length) {
+    messages.value[index].steps.push({ type, content, time: Date.now() })
+  }
+}
+
+// 结束本轮流式：收起连接、标记状态
+const finishStream = () => {
+  connectionStatus.value = 'disconnected'
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
+}
+
+// 分发后端推来的结构化事件
+const handleStreamEvent = (event, index) => {
+  const { type, content } = event
+
+  if (type === 'thought' || type === 'tool') {
+    // 思考步骤 / 工具调用：进思考链，不进聊天气泡
+    appendThinkingStep(index, type, content)
+    return
+  }
+
+  if (type === 'text') {
+    // 正式回答文本：进聊天气泡，保持打字机效果
+    appendTextToMessage(index, content)
+    return
+  }
+
+  if (type === 'done') {
+    finishStream()
+  }
 }
 
 // 发送消息
@@ -89,37 +134,37 @@ const sendMessage = (message) => {
   // 连接SSE
   if (eventSource) {
     eventSource.close()
+    eventSource = null
   }
 
-  // 创建一个空的AI回复消息
+  // 创建一个空的AI回复消息（自带空思考链）
   const aiMessageIndex = messages.value.length
   addMessage('', false)
 
   connectionStatus.value = 'connecting'
-  eventSource = chatWithInterviewApp(message, chatId.value)
 
-  // 监听SSE消息
-  eventSource.onmessage = (event) => {
-    const data = event.data
-    if (data && data !== '[DONE]') {
-      // 更新最新的AI消息内容，而不是创建新消息
-      if (aiMessageIndex < messages.value.length) {
-        messages.value[aiMessageIndex].content += data
+  eventSource = chatWithInterviewApp(
+    message,
+    chatId.value,
+    // onMessage：纯文本兜底（新协议下一般不会走到）
+    (data) => {
+      if (data === '[DONE]') {
+        finishStream()
+        return
       }
+      appendTextToMessage(aiMessageIndex, data)
+    },
+    // onError
+    (error) => {
+      console.error('SSE Error:', error)
+      connectionStatus.value = 'error'
+      finishStream()
+    },
+    // onEvent：结构化事件（thought / text / tool / done）
+    (event) => {
+      handleStreamEvent(event, aiMessageIndex)
     }
-
-    if (data === '[DONE]') {
-      connectionStatus.value = 'disconnected'
-      eventSource.close()
-    }
-  }
-
-  // 监听SSE错误
-  eventSource.onerror = (error) => {
-    console.error('SSE Error:', error)
-    connectionStatus.value = 'error'
-    eventSource.close()
-  }
+  )
 }
 
 // 触发隐藏的文件选择框
