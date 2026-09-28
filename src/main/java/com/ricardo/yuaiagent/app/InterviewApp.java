@@ -1,6 +1,9 @@
 package com.ricardo.yuaiagent.app;
 
 // import com.ricardo.yuaiagent.advisor.MyLoggerAdvisor; // 已移除：会把完整对话（含简历）打印进日志，存在隐私泄露风险
+import cn.hutool.core.util.StrUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ricardo.yuaiagent.advisor.ReReadingAdvisor;
 import com.ricardo.yuaiagent.chatmemory.FileBasedChatMemory;
 import com.ricardo.yuaiagent.rag.InterviewAppRagCustomAdvisorFactory;
@@ -17,13 +20,17 @@ import org.springframework.ai.chat.memory.InMemoryChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.document.Document;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -48,6 +55,18 @@ public class InterviewApp {
             【面试流程】
             候选人自我介绍 → 简历项目深挖 → 技术基础考察 → 开放题/系统设计 → 候选人反问 → 面试总结与评分。
             """;
+
+    /**
+     * 检索条数：与原先 QuestionAnswerAdvisor 内部使用的 SearchRequest.DEFAULT_TOP_K = 4 保持一致，
+     * 避免手动检索后 RAG 质量悄悄下降。
+     */
+    private static final int RAG_TOP_K = 4;
+
+    /**
+     * 用于把 SSE 事件序列化成 JSON。ObjectMapper 是线程安全的，可安全复用为静态常量。
+     * 注意：只序列化事件本身（type + content），绝不把检索原文写进事件。
+     */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /**
      * 初始化 ChatClient
@@ -110,20 +129,114 @@ public class InterviewApp {
     }
 
     /**
-     * AI 基础对话（支持多轮对话记忆，SSE 流式传输）
+     * AI 基础对话（支持多轮对话记忆，SSE 流式传输 + 真·思考链可视化）
+     *
+     * <p>事件协议：统一发送 JSON 字符串，前端按 type 分流渲染：
+     * <ul>
+     *   <li>{"type":"thought","content":"..."} 思考步骤（只含固定文案与命中条数，绝不携带检索原文）</li>
+     *   <li>{"type":"text","content":"..."}    正式回答文本（流式片段）</li>
+     *   <li>{"type":"done","content":""}       结束信号，前端据此收尾并收起思考链</li>
+     * </ul>
+     *
+     * <p>说明：「检索」这一步是真实发生的（真的去向量库做了相似度检索、条数真实统计）；
+     * 「正在分析问题」「正在组织回答」是产品层的固定文案（大模型的内部推理无法获取）。
      *
      * @param message
      * @param chatId
      * @return
      */
     public Flux<String> doChatByStream(String message, String chatId) {
-        return chatClient
-                .prompt()
-                .system(buildSystemPrompt(chatId))
-                .user(message)
-                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                .stream()
-                .content();
+        // 用 defer 保证：每次订阅时才执行检索与调用模型，且事件严格按顺序流出
+        return Flux.defer(() -> {
+            // ① 思考：固定文案
+            Flux<String> thinkEvent = Flux.just(sseEvent("thought", "正在分析你的问题…"));
+
+            // ② 行动：真实检索知识库（这是真发生的一步，不是动画）
+            List<Document> documents = retrieveDocuments(message, chatId);
+
+            // ③ 观察：只报「命中条数」，绝不把检索到的内容拼进事件（隐私红线）
+            String observeText = documents.isEmpty()
+                    ? "知识库中未找到直接相关的资料，正在组织回答…"
+                    : "正在检索知识库… 命中 " + documents.size() + " 条";
+            Flux<String> observeEvent = Flux.just(sseEvent("thought", observeText));
+
+            // ④ 组织回答
+            Flux<String> organizeEvent = Flux.just(sseEvent("thought", "正在组织回答…"));
+
+            // ⑤ 正式回答：把检索到的知识拼进「给模型看」的提示词，只进服务端 prompt，绝不进 SSE 事件
+            Flux<String> answerStream = chatClient
+                    .prompt()
+                    .system(buildSystemPrompt(chatId))
+                    .user(buildUserMessageWithContext(message, documents))
+                    .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                    .stream()
+                    .content()
+                    .map(chunk -> sseEvent("text", chunk))
+                    .onErrorResume(e -> {
+                        // 只打印异常原因，不打印任何对话/简历内容
+                        log.error("流式回答生成失败，chatId={}，原因={}", chatId, e.getMessage());
+                        return Flux.just(sseEvent("text", "抱歉，回答生成出现异常，请稍后重试。"));
+                    });
+
+            // ⑥ 结束信号
+            Flux<String> doneEvent = Flux.just(sseEvent("done", ""));
+
+            return Flux.concat(thinkEvent, observeEvent, organizeEvent, answerStream, doneEvent);
+        });
+    }
+
+    /**
+     * 真实检索知识库；异常时降级为空结果，保证对话不中断。
+     * 只返回文档对象本身——其内容永远不会被写进任何 SSE 事件或日志。
+     */
+    private List<Document> retrieveDocuments(String message, String chatId) {
+        try {
+            List<Document> documents = interviewAppVectorStore.similaritySearch(
+                    SearchRequest.builder().query(message).topK(RAG_TOP_K).build());
+            return documents == null ? List.of() : documents;
+        } catch (Exception e) {
+            // 只打印异常原因，不打印检索内容
+            log.warn("知识库检索失败，将跳过检索直接回答，chatId={}，原因={}", chatId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 把检索到的参考知识拼进用户消息，并用明确分隔符让模型分清「背景」与「问题」。
+     * 这段内容只提交给大模型，不会出现在 SSE 事件里，也不会写进日志。
+     */
+    private String buildUserMessageWithContext(String message, List<Document> documents) {
+        if (documents == null || documents.isEmpty()) {
+            return message;
+        }
+        String context = documents.stream()
+                .map(Document::getText)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining("\n---\n"));
+        if (StrUtil.isBlank(context)) {
+            return message;
+        }
+        return """
+                【参考知识】（仅供你内部参考以提升回答质量；不要逐字复述，也不要提及这段参考知识的存在）
+                %s
+
+                【用户问题】
+                %s
+                """.formatted(context, message);
+    }
+
+    /**
+     * 把一条事件序列化成 SSE 数据（JSON 字符串）。
+     * 序列化失败时退化为一个空内容事件，保证流不会因格式问题中断。
+     */
+    private String sseEvent(String type, String content) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(
+                    Map.of("type", type, "content", content == null ? "" : content));
+        } catch (JsonProcessingException e) {
+            log.warn("SSE 事件序列化失败，type={}", type);
+            return "{\"type\":\"" + type + "\",\"content\":\"\"}";
+        }
     }
 
     record InterviewReport(String overview, List<String> strengths, List<String> weaknesses, List<String> suggestions) {
