@@ -12,7 +12,7 @@
 
 - 🧠 **ReAct 真思考链** — 后端真实检索知识库，通过 SSE 实时推送 `thought` / `text` / `done` 三类事件，前端把"思考 → 检索 → 组织"全流程可视化。检索是**真的**（真实命中条数），不是动画。
 - 📄 **简历 PDF 解析** — 上传即读（PDFBox 抽取文本），面试官自动围绕简历中的项目经历逐层追问。
-- 🔒 **隐私防护** — 简历原文只进内存、只喂给模型，**不进日志、不进 SSE 事件**；思考链只汇报"命中 N 条"；对话日志默认保持 INFO 级别，密钥永不打印。
+- 🔒 **隐私防护** — 思考链 `thought` 事件零原文 + 服务端日志零原文。AI 回答正文（`text` 事件）中可能引用简历里的项目名称，这是面试官深挖项目的核心能力，不是隐私泄露。
 - 📚 **RAG 面试题库** — 内置 Java 基础与并发、Spring 与 MySQL/Redis、微服务与分布式三大主题题库，回答时自动检索增强。
 - ⚙️ **CI/CD** — GitHub Actions 自动跑后端测试 + 前端构建，全程零真实 API 消耗。
 
@@ -122,13 +122,14 @@ mvnw.cmd spring-boot:run
 ./mvnw spring-boot:run
 ```
 
-启动成功后会看到：
+启动成功后会看到（节选）：
 
 ```
-已从 .env 注入系统属性：DASHSCOPE_API_KEY（长度=xx）
-DASHSCOPE_API_KEY 已就位（长度=xx），等待 application.yml 占位符解析。
+Tomcat started on port 8123 (http) with context path '/api'
 Started RicardoAiAgentApplication in x.xxx seconds
 ```
+
+> 💡 环境变量注入发生在 Spring 日志系统初始化**之前**，所以"已从 .env 注入系统属性"这类日志在 `spring-boot:run` 下不会打印出来。只要应用能正常启动，就说明 key 注入成功——反过来说，如果 key 没注入，`${DASHSCOPE_API_KEY}` 占位符解析会直接报错、启动中断。
 
 后端地址：`http://localhost:8123/api`
 

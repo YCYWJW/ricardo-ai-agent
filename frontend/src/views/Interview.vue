@@ -43,7 +43,7 @@ import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import ChatRoom from '../components/ChatRoom.vue'
 import AppFooter from '../components/AppFooter.vue'
-import { chatWithInterviewApp, uploadResume } from '../api'
+import { chatWithInterviewApp, startInterviewApp, uploadResume } from '../api'
 
 // 设置页面标题和元数据
 useHead({
@@ -127,10 +127,9 @@ const handleStreamEvent = (event, index) => {
   }
 }
 
-// 发送消息
-const sendMessage = (message) => {
-  addMessage(message, true)
-
+// 打开一条 SSE 流：创建一个空的 AI 气泡（自带空思考链）并连接后端。
+// autoStart = true 时走「自动开场」通道，消息体由 api 层统一提供，不显示用户气泡。
+const openStream = (message, autoStart = false) => {
   // 连接SSE
   if (eventSource) {
     eventSource.close()
@@ -143,28 +142,41 @@ const sendMessage = (message) => {
 
   connectionStatus.value = 'connecting'
 
-  eventSource = chatWithInterviewApp(
-    message,
-    chatId.value,
-    // onMessage：纯文本兜底（新协议下一般不会走到）
-    (data) => {
-      if (data === '[DONE]') {
-        finishStream()
-        return
-      }
-      appendTextToMessage(aiMessageIndex, data)
-    },
-    // onError
-    (error) => {
-      console.error('SSE Error:', error)
-      connectionStatus.value = 'error'
+  // onMessage：纯文本兜底（新协议下一般不会走到）
+  const onMessage = (data) => {
+    if (data === '[DONE]') {
       finishStream()
-    },
-    // onEvent：结构化事件（thought / text / tool / done）
-    (event) => {
-      handleStreamEvent(event, aiMessageIndex)
+      return
     }
-  )
+    appendTextToMessage(aiMessageIndex, data)
+  }
+
+  // onError
+  const onError = (error) => {
+    console.error('SSE Error:', error)
+    connectionStatus.value = 'error'
+    finishStream()
+  }
+
+  // onEvent：结构化事件（thought / text / tool / done）
+  const onEvent = (event) => {
+    handleStreamEvent(event, aiMessageIndex)
+  }
+
+  eventSource = autoStart
+    ? startInterviewApp(chatId.value, onMessage, onError, onEvent)
+    : chatWithInterviewApp(message, chatId.value, onMessage, onError, onEvent)
+}
+
+// 发送消息（用户主动发问：先落用户气泡，再开流）
+const sendMessage = (message) => {
+  addMessage(message, true)
+  openStream(message)
+}
+
+// 简历上传成功后自动开场：不落用户气泡，用户看到的只有 AI 紧接着给出的开场白
+const startAutoInterview = () => {
+  openStream('', true)
 }
 
 // 触发隐藏的文件选择框
@@ -195,7 +207,9 @@ const onFileChange = async (event) => {
   try {
     const res = await uploadResume(chatId.value, file)
     if (res.data && res.data.success) {
-      alert('简历已就绪，开始面试吧')
+      // 上传成功不弹提示框：AI 紧接着给出的开场白本身就是最好的成功反馈。
+      // 若此处用 alert，模态框会卡住页面，开场白得等用户点「确定」才会开始，正好破坏要做的效果。
+      startAutoInterview()
     } else {
       alert((res.data && res.data.message) || '上传失败，请重试')
     }

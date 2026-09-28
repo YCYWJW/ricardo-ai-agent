@@ -66,6 +66,17 @@ export const chatWithInterviewApp = (message, chatId, onMessage, onError, onEven
   return connectSSE('/ai/interview_app/chat/sse', { message, chatId }, onMessage, onError, onEvent)
 }
 
+// 系统触发消息前缀：后端据此识别「简历上传成功后的自动开场」并让面试官主动发问。
+// 注意：这只是一句固定文案，绝不携带任何简历原文（隐私红线）。
+const AUTO_START_PREFIX = '__SYSTEM__'
+
+// AI智能面试官：简历上传成功后自动触发开场。
+// 复用同一条 SSE 通道，只是把消息体换成系统触发文案；前端不会把它渲染成用户气泡。
+export const startInterviewApp = (chatId, onMessage, onError, onEvent) => {
+  const triggerMessage = `${AUTO_START_PREFIX}: 我已经上传了简历，请阅读后开始面试`
+  return chatWithInterviewApp(triggerMessage, chatId, onMessage, onError, onEvent)
+}
+
 // 上传简历 PDF（FormData 方式）
 export const uploadResume = (chatId, file) => {
   const formData = new FormData()
@@ -82,6 +93,7 @@ export const chatWithManus = (message) => {
 
 export default {
   chatWithInterviewApp,
+  startInterviewApp,
   chatWithManus,
   uploadResume
 } 

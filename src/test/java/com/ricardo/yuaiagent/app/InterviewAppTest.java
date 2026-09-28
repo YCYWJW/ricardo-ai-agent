@@ -24,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -139,6 +141,78 @@ class InterviewAppTest {
 
         // 3. thought 事件只汇报「命中条数」，不含原文
         assertTrue(events.stream().anyMatch(e -> e.contains("命中 1 条")), "thought 应汇报真实命中条数");
+    }
+
+    /**
+     * 自动开场测试：前端在「简历上传成功」后发送 __SYSTEM__ 触发消息，
+     * 后端应进入自动开场分支——读简历、准备开场问题，并且不去检索题库
+     * （触发消息本身不含有效检索语义，检索只会塞进无关内容）。
+     * 同时守住红线：触发消息与所有 SSE 事件中都不含简历原文。
+     */
+    @Test
+    void doChatByStream_上传简历后自动开场() {
+        String chatId = UUID.randomUUID().toString();
+        // 假简历：含姓名、手机号、邮箱、项目名等敏感字样
+        resumeStore.put(chatId, "张三，电话13800000000，邮箱 zhangsan@example.com，项目：分布式订单中心系统");
+
+        when(dashscopeChatModel.stream(any(Prompt.class)))
+                .thenReturn(Flux.just(new ChatResponse(List.of(
+                        new Generation(new AssistantMessage("我看到你的简历了，我们先聊聊订单中心项目"))
+                ))));
+
+        List<String> events = interviewApp.doChatByStream(
+                        "__SYSTEM__: 我已经上传了简历，请阅读后开始面试", chatId)
+                .collectList()
+                .block();
+
+        assertNotNull(events);
+
+        // 1. 走的必须是自动开场分支：思考链是「读简历」语义
+        assertTrue(events.stream().anyMatch(e -> e.contains("正在阅读你的简历")), "应进入自动开场分支");
+
+        // 2. 自动开场不检索题库，因此不该出现检索相关文案与命中条数
+        assertFalse(events.stream().anyMatch(e -> e.contains("正在检索知识库")), "自动开场不应检索题库");
+        assertFalse(events.stream().anyMatch(e -> e.contains("命中 ")), "自动开场不应汇报命中条数");
+
+        // 3. 开场同样要有完整的 text / done 事件，前端才能正常流式渲染与收尾
+        assertTrue(events.stream().anyMatch(e -> e.contains("\"type\":\"text\"")), "应包含 text 事件");
+        assertTrue(events.stream().anyMatch(e -> e.contains("\"type\":\"done\"")), "应包含 done 事件");
+
+        // 4. 红线：任何事件都不得出现简历原文，也不得把系统前缀回传给前端
+        for (String event : events) {
+            assertFalse(event.contains("张三"), "事件泄露了简历姓名：" + event);
+            assertFalse(event.contains("13800000000"), "事件泄露了简历手机号：" + event);
+            assertFalse(event.contains("zhangsan@example.com"), "事件泄露了简历邮箱：" + event);
+            assertFalse(event.contains("分布式订单中心系统"), "事件泄露了简历项目名：" + event);
+            assertFalse(event.contains("__SYSTEM__"), "系统触发前缀不应出现在事件里：" + event);
+        }
+
+        // 5. 确认真的跳过了向量检索：一次都没有调用
+        verify(interviewAppVectorStore, never()).similaritySearch(any(SearchRequest.class));
+    }
+
+    /**
+     * 边界测试：即使收到带系统前缀的消息，只要该会话没有简历，也不能走自动开场分支。
+     * 否则面试官会对着空气说「我看到你的简历了」，体验错乱。
+     */
+    @Test
+    void doChatByStream_无简历时系统前缀不触发开场() {
+        String chatId = UUID.randomUUID().toString(); // 刻意不塞简历
+
+        when(dashscopeChatModel.stream(any(Prompt.class)))
+                .thenReturn(Flux.just(new ChatResponse(List.of(
+                        new Generation(new AssistantMessage("这是模拟的面试官回答"))
+                ))));
+
+        List<String> events = interviewApp.doChatByStream(
+                        "__SYSTEM__: 我已经上传了简历，请阅读后开始面试", chatId)
+                .collectList()
+                .block();
+
+        assertNotNull(events);
+        // 没有简历时应退回常规分支（正常检索并回答），而不是自动开场
+        assertTrue(events.stream().anyMatch(e -> e.contains("正在分析你的问题")), "无简历时应走常规分支");
+        assertFalse(events.stream().anyMatch(e -> e.contains("正在阅读你的简历")), "无简历时不应进入自动开场");
     }
 
     @Test

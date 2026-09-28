@@ -69,6 +69,36 @@ public class InterviewApp {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /**
+     * 前端在「简历上传成功」后自动发送的系统触发消息前缀。
+     * 这条消息用户看不到（前端不渲染用户气泡），后端识别到它后会让面试官主动开场，
+     * 而不是干等候选人先提问。
+     * 注意：它只是一句固定文案，绝不携带任何简历内容（隐私红线）。
+     */
+    private static final String AUTO_START_PREFIX = "__SYSTEM__";
+
+    /**
+     * 识别到触发消息后，真正发给模型的内容（固定内部指令，同样不含简历原文）。
+     * 与触发消息分开定义，是为了让「前端传什么」和「模型看到什么」解耦。
+     */
+    private static final String AUTO_START_INSTRUCTION =
+            "候选人刚刚上传了简历，请你阅读简历后主动开始这场面试。";
+
+    /**
+     * 自动开场时临时追加到系统提示词末尾的规则。
+     * 只在「本轮是自动开场」且「该会话确实存有简历」时才追加，不影响其它轮次。
+     */
+    private static final String AUTO_START_PROMPT = """
+
+            【本轮特殊要求：自动开场】
+            候选人已上传简历，请基于简历内容主动开始面试，不要等候选人先问。
+            要求：
+            1. 先用一两句话简短开场，说明你会围绕他的简历展开，不必再请他做自我介绍；
+            2. 随后直接针对简历中的第一个项目，抛出一个具体的深挖问题（例如他在该项目中
+               承担的核心职责、技术选型的理由、遇到的最大难点）；
+            3. 本轮只抛出这一个问题，不要一次列出多个问题，把回答的机会留给候选人。
+            """;
+
+    /**
      * 初始化 ChatClient
      *
      * @param dashscopeChatModel
@@ -146,43 +176,82 @@ public class InterviewApp {
      * @return
      */
     public Flux<String> doChatByStream(String message, String chatId) {
-        // 用 defer 保证：每次订阅时才执行检索与调用模型，且事件严格按顺序流出
+        // 用 defer 保证：每次订阅时才判定开场意图、执行检索与调用模型，且事件严格按顺序流出
         return Flux.defer(() -> {
-            // ① 思考：固定文案
-            Flux<String> thinkEvent = Flux.just(sseEvent("thought", "正在分析你的问题…"));
+            // 是否为「简历上传后自动开场」：既要带系统前缀，又要该会话确实存有简历，两个条件缺一不可。
+            // 这样即便有人手动构造前缀、或简历已被清理，也不会走错分支。
+            boolean autoStart = isAutoStart(message) && hasResume(chatId);
 
-            // ② 行动：真实检索知识库（这是真发生的一步，不是动画）
+            if (autoStart) {
+                // ---- 自动开场分支：不检索题库（开场白不需要，检索反而会塞进无关内容），
+                //      思考链文案改为贴合「读简历」的语义，三步依然真实反映服务端在做的事 ----
+                return Flux.concat(
+                        Flux.just(sseEvent("thought", "正在阅读你的简历…")),
+                        Flux.just(sseEvent("thought", "简历已就绪，正在准备开场问题…")),
+                        Flux.just(sseEvent("thought", "正在组织回答…")),
+                        buildAnswerStream(AUTO_START_INSTRUCTION, chatId, AUTO_START_PROMPT),
+                        Flux.just(sseEvent("done", ""))
+                );
+            }
+
+            // ---- 常规对话分支 ----
+            // ① 行动：真实检索知识库（这是真发生的一步，不是动画）
             List<Document> documents = retrieveDocuments(message, chatId);
 
-            // ③ 观察：只报「命中条数」，绝不把检索到的内容拼进事件（隐私红线）
+            // ② 观察：只报「命中条数」，绝不把检索到的内容拼进事件（隐私红线）
             String observeText = documents.isEmpty()
                     ? "知识库中未找到直接相关的资料，正在组织回答…"
                     : "正在检索知识库… 命中 " + documents.size() + " 条";
-            Flux<String> observeEvent = Flux.just(sseEvent("thought", observeText));
 
-            // ④ 组织回答
-            Flux<String> organizeEvent = Flux.just(sseEvent("thought", "正在组织回答…"));
-
-            // ⑤ 正式回答：把检索到的知识拼进「给模型看」的提示词，只进服务端 prompt，绝不进 SSE 事件
-            Flux<String> answerStream = chatClient
-                    .prompt()
-                    .system(buildSystemPrompt(chatId))
-                    .user(buildUserMessageWithContext(message, documents))
-                    .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                    .stream()
-                    .content()
-                    .map(chunk -> sseEvent("text", chunk))
-                    .onErrorResume(e -> {
-                        // 只打印异常原因，不打印任何对话/简历内容
-                        log.error("流式回答生成失败，chatId={}，原因={}", chatId, e.getMessage());
-                        return Flux.just(sseEvent("text", "抱歉，回答生成出现异常，请稍后重试。"));
-                    });
-
-            // ⑥ 结束信号
-            Flux<String> doneEvent = Flux.just(sseEvent("done", ""));
-
-            return Flux.concat(thinkEvent, observeEvent, organizeEvent, answerStream, doneEvent);
+            // ③ 正式回答：把检索到的知识拼进「给模型看」的提示词，只进服务端 prompt，绝不进 SSE 事件
+            return Flux.concat(
+                    Flux.just(sseEvent("thought", "正在分析你的问题…")),
+                    Flux.just(sseEvent("thought", observeText)),
+                    Flux.just(sseEvent("thought", "正在组织回答…")),
+                    buildAnswerStream(buildUserMessageWithContext(message, documents), chatId, null),
+                    Flux.just(sseEvent("done", ""))
+            );
         });
+    }
+
+    /**
+     * 判断一条消息是否为「上传简历后自动开场」的系统触发消息。
+     * 只看固定前缀，不解析内容——触发消息本身不含任何简历信息。
+     */
+    private boolean isAutoStart(String message) {
+        return message != null && message.trim().startsWith(AUTO_START_PREFIX);
+    }
+
+    /**
+     * 判断该会话是否已上传简历（决定要不要进入自动开场分支）。
+     */
+    private boolean hasResume(String chatId) {
+        String resume = resumeStore.get(chatId);
+        return resume != null && !resume.isBlank();
+    }
+
+    /**
+     * 构造正式回答的流：系统提示词（含简历背景）+ 用户消息，逐块转成 text 事件。
+     *
+     * @param userMessage       已经拼好上下文的用户消息（只进 prompt，不进事件）
+     * @param extraSystemPrompt 本轮额外追加的系统提示词，传 null 表示不追加
+     */
+    private Flux<String> buildAnswerStream(String userMessage, String chatId, String extraSystemPrompt) {
+        String systemPrompt = buildSystemPrompt(chatId)
+                + (extraSystemPrompt == null ? "" : extraSystemPrompt);
+        return chatClient
+                .prompt()
+                .system(systemPrompt)
+                .user(userMessage)
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
+                .stream()
+                .content()
+                .map(chunk -> sseEvent("text", chunk))
+                .onErrorResume(e -> {
+                    // 只打印异常原因，不打印任何对话/简历内容
+                    log.error("流式回答生成失败，chatId={}，原因={}", chatId, e.getMessage());
+                    return Flux.just(sseEvent("text", "抱歉，回答生成出现异常，请稍后重试。"));
+                });
     }
 
     /**
