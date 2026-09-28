@@ -10,8 +10,8 @@ spring:
 #    password: 123456
   ai:
     dashscope:
-      # 需要替换为你自己的 key
-      api-key: your-api-key
+      # 从 .env 的 DASHSCOPE_API_KEY 注入（由 DotenvConfig 加载），此处用占位符引用，不写真值
+      api-key: ${DASHSCOPE_API_KEY}
       chat:
         options:
           model: qwen-plus
