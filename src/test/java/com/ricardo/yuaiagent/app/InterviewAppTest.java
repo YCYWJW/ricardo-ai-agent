@@ -48,7 +48,7 @@ class InterviewAppTest {
     @Test
     void doChatWithRag() {
         String chatId = UUID.randomUUID().toString();
-        // 注意：RAG 知识库仍是恋爱文档，待后续阶段换成面试题库后再验证检索效果
+        // RAG 知识库已换为 Java 面试题库文档
         String message = "面试中常问的 Java 后端基础知识有哪些？";
         String answer = interviewApp.doChatWithRag(message, chatId);
         Assertions.assertNotNull(answer);
