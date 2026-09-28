@@ -2,9 +2,10 @@ package com.ricardo.yuaiagent.tools;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+/**
+ * 文件操作工具单元测试：直接 new 对象读写本地临时文件，不启动 Spring、不调用 AI，因此不烧 token。
+ */
 class FileOperationToolTest {
 
     @Test

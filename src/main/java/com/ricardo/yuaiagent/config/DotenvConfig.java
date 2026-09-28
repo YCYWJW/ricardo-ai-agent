@@ -1,10 +1,13 @@
 package com.ricardo.yuaiagent.config;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import io.github.cdimascio.dotenv.DotenvEntry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.env.ConfigurableEnvironment;
+
+import java.util.Set;
 
 /**
  * 环境准备阶段（Spring 启动的最早环节之一）加载项目根目录的 .env 文件，
@@ -20,10 +23,28 @@ public class DotenvConfig implements EnvironmentPostProcessor {
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        Dotenv dotenv = Dotenv.configure().load();
+        // 先加载 .env：ignoreIfMissing() 让文件缺失时不抛异常，仅在内存里得到空结果，适合 CI 等无 .env 场景
+        Dotenv dotenv;
+        try {
+            dotenv = Dotenv.configure().ignoreIfMissing().load();
+        } catch (Exception e) {
+            // .env 存在但解析失败（如格式损坏）时也不让应用崩溃，只告警并回退到系统环境变量
+            log.warn(".env 加载失败（{}），将使用系统环境变量。", e.getMessage());
+            return;
+        }
 
-        // 把 .env 里的所有变量逐个注入为系统属性（不硬编码任何具体密钥）
-        dotenv.entries().forEach(entry -> {
+        // 注意：dotenv.entries() 会把系统环境变量也合并进来、永远不为空，
+        // 所以必须用 DECLARED_IN_ENV_FILE 只取「.env 文件里声明」的变量，才能正确判断文件是否缺失。
+        Set<DotenvEntry> declaredInFile = dotenv.entries(Dotenv.Filter.DECLARED_IN_ENV_FILE);
+
+        // .env 缺失时（如 CI 环境），直接跳过注入，让后续占位符从系统环境变量取值
+        if (declaredInFile.isEmpty()) {
+            log.warn(".env 缺失，将使用系统环境变量。");
+            return;
+        }
+
+        // 只把 .env 文件里声明的变量逐个注入为系统属性（不硬编码任何具体密钥）
+        declaredInFile.forEach(entry -> {
             System.setProperty(entry.getKey(), entry.getValue());
             // 只打印变量名和长度用于验证注入成功，绝不打印真实密钥内容
             log.info("已从 .env 注入系统属性：{}（长度={}）", entry.getKey(),
