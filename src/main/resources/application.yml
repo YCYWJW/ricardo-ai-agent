@@ -3,6 +3,13 @@ spring:
     name: ricardo-ai-agent
   profiles:
     active: local
+  # 文件上传大小限制（简历 PDF 上传解析用）。
+  # 说明：Spring 默认单文件上限只有 1MB，不设的话 5MB 的简历会在进接口前就被拒。
+  # max-file-size 限制单个文件，max-request-size 限制整条请求（含 multipart 边界开销，留 1MB 余量）。
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 # 临时注释掉，便于大家开发调试和部署（实际填写 PgVector 数据库信息）
 #  datasource:
 #    url: xxx
@@ -60,7 +67,7 @@ knife4j:
 search-api:
   # 需要替换为你自己的 key
   api-key: 你的 API Key
-# 修改日志级别，查看 Spring AI 更多调用细节
+# 保持 INFO 级别即可，切勿改回 DEBUG——DEBUG 会把对话内容（含简历文本）完整打印到日志
 logging:
   level:
-    org.springframework.ai: DEBUG
+    org.springframework.ai: INFO

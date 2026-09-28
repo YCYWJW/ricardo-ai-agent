@@ -1,10 +1,24 @@
 <template>
   <div class="interview-container">
     <div class="header">
-      <div class="back-button" @click="goBack">返回</div>
+      <div class="header-left">
+        <div class="back-button" @click="goBack">返回</div>
+        <button class="upload-button" :disabled="uploading" @click="triggerUpload">
+          {{ uploading ? '上传中...' : '📄 上传简历' }}
+        </button>
+      </div>
       <h1 class="title">AI智能面试官</h1>
       <div class="chat-id">会话ID: {{ chatId }}</div>
     </div>
+
+    <!-- 隐藏的原生文件选择框，点击"上传简历"按钮时触发 -->
+    <input
+      ref="fileInput"
+      type="file"
+      accept=".pdf"
+      style="display: none"
+      @change="onFileChange"
+    />
 
     <div class="content-wrapper">
       <div class="chat-area">
@@ -29,7 +43,7 @@ import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import ChatRoom from '../components/ChatRoom.vue'
 import AppFooter from '../components/AppFooter.vue'
-import { chatWithInterviewApp } from '../api'
+import { chatWithInterviewApp, uploadResume } from '../api'
 
 // 设置页面标题和元数据
 useHead({
@@ -51,6 +65,8 @@ const messages = ref([])
 const chatId = ref('')
 const connectionStatus = ref('disconnected')
 let eventSource = null
+const fileInput = ref(null)
+const uploading = ref(false)
 
 // 生成随机会话ID
 const generateChatId = () => {
@@ -103,6 +119,56 @@ const sendMessage = (message) => {
     console.error('SSE Error:', error)
     connectionStatus.value = 'error'
     eventSource.close()
+  }
+}
+
+// 触发隐藏的文件选择框
+const triggerUpload = () => {
+  if (fileInput.value) {
+    fileInput.value.click()
+  }
+}
+
+// 选择文件后触发上传
+const onFileChange = async (event) => {
+  const file = event.target.files && event.target.files[0]
+  if (!file) return
+
+  // 前端先做一次轻量校验，尽早拦截明显不合规的文件
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    alert('只支持 PDF 格式的简历文件')
+    resetFileInput()
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    alert('简历文件超过 5MB，请压缩后重试')
+    resetFileInput()
+    return
+  }
+
+  uploading.value = true
+  try {
+    const res = await uploadResume(chatId.value, file)
+    if (res.data && res.data.success) {
+      alert('简历已就绪，开始面试吧')
+    } else {
+      alert((res.data && res.data.message) || '上传失败，请重试')
+    }
+  } catch (error) {
+    const msg = error.response && error.response.data && error.response.data.message
+      ? error.response.data.message
+      : (error.message || '上传失败，请重试')
+    alert('上传失败：' + msg)
+  } finally {
+    uploading.value = false
+    resetFileInput()
+  }
+}
+
+// 清空文件选择框，让同一个文件可以再次选择
+const resetFileInput = () => {
+  if (fileInput.value) {
+    fileInput.value.value = ''
   }
 }
 
@@ -166,6 +232,34 @@ onBeforeUnmount(() => {
   margin-right: 8px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.upload-button {
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  color: white;
+  transition: background-color 0.2s;
+}
+
+.upload-button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+}
+
+.upload-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .title {
   font-size: 20px;
   font-weight: bold;
@@ -225,6 +319,11 @@ onBeforeUnmount(() => {
 
   .back-button {
     font-size: 14px;
+  }
+
+  .upload-button {
+    font-size: 12px;
+    padding: 4px 8px;
   }
 
   .title {
