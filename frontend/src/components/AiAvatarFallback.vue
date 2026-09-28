@@ -1,6 +1,6 @@
 <template>
   <div class="ai-avatar-fallback" :class="type">
-    <span v-if="type === 'love'">❤️</span>
+    <span v-if="type === 'interview'">🎤</span>
     <span v-else>🤖</span>
   </div>
 </template>
@@ -25,8 +25,8 @@ defineProps({
   border-radius: 50%;
 }
 
-.love {
-  background: linear-gradient(45deg, #ff6b8b, #ff8e8e);
+.interview {
+  background: linear-gradient(45deg, #2563eb, #64748b);
 }
 
 .default, .super {

@@ -1,22 +1,22 @@
 <template>
-  <div class="love-master-container">
+  <div class="interview-container">
     <div class="header">
       <div class="back-button" @click="goBack">返回</div>
-      <h1 class="title">AI恋爱大师</h1>
+      <h1 class="title">AI智能面试官</h1>
       <div class="chat-id">会话ID: {{ chatId }}</div>
     </div>
-    
+
     <div class="content-wrapper">
       <div class="chat-area">
-        <ChatRoom 
-          :messages="messages" 
+        <ChatRoom
+          :messages="messages"
           :connection-status="connectionStatus"
-          ai-type="love"
+          ai-type="interview"
           @send-message="sendMessage"
         />
       </div>
     </div>
-    
+
     <div class="footer-container">
       <AppFooter />
     </div>
@@ -29,19 +29,19 @@ import { useRouter } from 'vue-router'
 import { useHead } from '@vueuse/head'
 import ChatRoom from '../components/ChatRoom.vue'
 import AppFooter from '../components/AppFooter.vue'
-import { chatWithLoveApp } from '../api'
+import { chatWithInterviewApp } from '../api'
 
 // 设置页面标题和元数据
 useHead({
-  title: 'AI恋爱大师 - 李嘉图AI超级智能体应用平台',
+  title: 'AI智能面试官 - 李嘉图AI超级智能体应用平台',
   meta: [
     {
       name: 'description',
-      content: 'AI恋爱大师是李嘉图AI超级智能体应用平台的专业情感顾问，帮你解答各种恋爱问题，提供情感建议'
+      content: 'AI智能面试官是李嘉图AI超级智能体应用平台的资深程序员面试官，基于你的简历针对性地深挖项目经历，进行多轮模拟面试'
     },
     {
       name: 'keywords',
-      content: 'AI恋爱大师,情感顾问,恋爱咨询,AI聊天,情感问题,李嘉图,AI智能体'
+      content: 'AI智能面试官,模拟面试,程序员面试,Java后端,深挖项目,AI聊天,李嘉图,AI智能体'
     }
   ]
 })
@@ -54,7 +54,7 @@ let eventSource = null
 
 // 生成随机会话ID
 const generateChatId = () => {
-  return 'love_' + Math.random().toString(36).substring(2, 10)
+  return 'interview_' + Math.random().toString(36).substring(2, 10)
 }
 
 // 添加消息到列表
@@ -69,19 +69,19 @@ const addMessage = (content, isUser) => {
 // 发送消息
 const sendMessage = (message) => {
   addMessage(message, true)
-  
+
   // 连接SSE
   if (eventSource) {
     eventSource.close()
   }
-  
+
   // 创建一个空的AI回复消息
   const aiMessageIndex = messages.value.length
   addMessage('', false)
-  
+
   connectionStatus.value = 'connecting'
-  eventSource = chatWithLoveApp(message, chatId.value)
-  
+  eventSource = chatWithInterviewApp(message, chatId.value)
+
   // 监听SSE消息
   eventSource.onmessage = (event) => {
     const data = event.data
@@ -91,13 +91,13 @@ const sendMessage = (message) => {
         messages.value[aiMessageIndex].content += data
       }
     }
-    
+
     if (data === '[DONE]') {
       connectionStatus.value = 'disconnected'
       eventSource.close()
     }
   }
-  
+
   // 监听SSE错误
   eventSource.onerror = (error) => {
     console.error('SSE Error:', error)
@@ -115,9 +115,9 @@ const goBack = () => {
 onMounted(() => {
   // 生成聊天ID
   chatId.value = generateChatId()
-  
+
   // 添加欢迎消息
-  addMessage('欢迎来到AI恋爱大师，请告诉我你的恋爱问题，我会尽力给予帮助和建议。', false)
+  addMessage('你好，我是你的资深 AI 面试官。你可以直接做一段自我介绍，也可以把简历的文字内容粘贴给我，我会针对你的项目经历进行深挖提问。准备好了吗？', false)
 })
 
 // 组件销毁前关闭SSE连接
@@ -129,11 +129,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.love-master-container {
+.interview-container {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: #fff9f9;
+  background-color: #f5f7fa;
 }
 
 .header {
@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background-color: #ff6b8b;
+  background-color: #2563eb;
   color: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
@@ -202,15 +202,15 @@ onBeforeUnmount(() => {
   .header {
     padding: 12px 16px;
   }
-  
+
   .title {
     font-size: 18px;
   }
-  
+
   .chat-id {
     font-size: 12px;
   }
-  
+
   .chat-area {
     padding: 12px;
     min-height: calc(100vh - 48px - 160px); /* 调整计算值 */
@@ -222,23 +222,23 @@ onBeforeUnmount(() => {
   .header {
     padding: 10px 12px;
   }
-  
+
   .back-button {
     font-size: 14px;
   }
-  
+
   .title {
     font-size: 16px;
   }
-  
+
   .chat-id {
     display: none;
   }
-  
+
   .chat-area {
     padding: 8px;
     min-height: calc(100vh - 42px - 150px); /* 再次调整计算值 */
     margin-bottom: 8px;
   }
 }
-</style> 
+</style>

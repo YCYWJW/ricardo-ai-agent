@@ -67,7 +67,7 @@ const props = defineProps({
   },
   aiType: {
     type: String,
-    default: 'default'  // 'love' 或 'super'
+    default: 'default'  // 'interview' 或 'super'
   }
 })
 
@@ -78,8 +78,8 @@ const messagesContainer = ref(null)
 
 // 根据AI类型选择不同头像
 const aiAvatar = computed(() => {
-  return props.aiType === 'love' 
-    ? '/ai-love-avatar.png'  // 恋爱大师头像
+  return props.aiType === 'interview' 
+    ? '/ai-interview-avatar.png'  // 智能面试官头像
     : '/ai-super-avatar.png' // 超级智能体头像
 })
 

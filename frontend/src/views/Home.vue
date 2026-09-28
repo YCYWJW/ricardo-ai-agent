@@ -9,12 +9,12 @@
     </div>
     
     <div class="apps-container">
-      <div class="app-card" @click="navigateTo('/love-master')">
+      <div class="app-card" @click="navigateTo('/interview')">
         <div class="card-glow"></div>
-        <div class="app-icon love-icon">❤️</div>
+        <div class="app-icon interview-icon">🎤</div>
         <div class="app-info">
-          <div class="app-title">AI恋爱大师</div>
-          <div class="app-desc">智能情感顾问，帮你解答恋爱烦恼</div>
+          <div class="app-title">AI智能面试官</div>
+          <div class="app-desc">资深AI面试官，深挖你的项目经历</div>
         </div>
         <div class="app-button">
           <span class="btn-text">立即体验</span>
@@ -57,11 +57,11 @@ useHead({
   meta: [
     {
       name: 'description',
-      content: '李嘉图AI超级智能体应用平台提供AI恋爱大师和AI超级智能体服务，满足您的各种AI对话需求'
+      content: '李嘉图AI超级智能体应用平台提供AI智能面试官和AI超级智能体服务，满足您的各种AI对话需求'
     },
     {
       name: 'keywords',
-      content: 'AI智能体,AI应用,AI恋爱大师,AI助手,智能对话,李嘉图,AI超级智能体,首页'
+      content: 'AI智能体,AI应用,AI智能面试官,AI助手,智能对话,李嘉图,AI超级智能体,首页'
     }
   ]
 })
@@ -262,9 +262,9 @@ const navigateTo = (path) => {
   z-index: 1;
 }
 
-.love-icon {
-  background: linear-gradient(135deg, #ff007a, #ff5722);
-  box-shadow: 0 0 20px rgba(255, 0, 122, 0.5);
+.interview-icon {
+  background: linear-gradient(135deg, #2563eb, #64748b);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.5);
 }
 
 .robot-icon {
