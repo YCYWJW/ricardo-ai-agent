@@ -1,0 +1,27 @@
+# ============================================================
+# Docker 构建上下文排除清单（根目录）
+# 作用：docker build 时，这些文件不会被发送到 Docker 守护进程，
+#      从根本上杜绝「把敏感文件打进镜像」的可能。
+# ============================================================
+
+# 🔴 安全红线：敏感配置绝不进镜像（运行时通过 docker-compose 的 env_file 注入）
+.env
+.env.local
+application-local.yml
+
+# 构建产物与临时文件
+target/
+tmp/
+node_modules/
+dist/
+
+# 版本控制与 IDE 配置
+.git/
+.gitignore
+.idea/
+.vscode/
+*.iml
+
+# 文档与 CI 配置（镜像里不需要）
+README.md
+.github/

@@ -1,0 +1,45 @@
+# ============================================================
+# 一键启动前后端：docker compose up --build
+# 前端：http://localhost        （Nginx 托管，/api 反向代理到后端）
+# 后端：http://localhost:8123/api
+# ============================================================
+
+services:
+  # ---------- 后端：Spring Boot ----------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ricardo-ai-agent-backend:latest
+    container_name: ricardo-ai-agent-backend
+    # 🔴 环境变量在「运行时」从宿主机 .env 注入，镜像里不含任何 .env。
+    #    说明：.env 已被 .gitignore 与 .dockerignore 双重排除，永远不会进镜像。
+    #    required: false 让 .env 缺失时也能解析配置（CI 等场景），启动后由系统环境变量兜底。
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "8123:8123"
+    restart: unless-stopped
+    networks:
+      - ricardo-net
+
+  # ---------- 前端：Vue3 + Nginx ----------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ricardo-ai-agent-frontend:latest
+    container_name: ricardo-ai-agent-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - ricardo-net
+
+# 自定义桥接网络：让 frontend 能通过服务名 backend 访问后端
+networks:
+  ricardo-net:
+    driver: bridge
