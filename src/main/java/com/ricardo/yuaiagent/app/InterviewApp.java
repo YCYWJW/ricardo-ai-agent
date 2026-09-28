@@ -1,10 +1,11 @@
 package com.ricardo.yuaiagent.app;
 
-import com.ricardo.yuaiagent.advisor.MyLoggerAdvisor;
+// import com.ricardo.yuaiagent.advisor.MyLoggerAdvisor; // 已移除：会把完整对话（含简历）打印进日志，存在隐私泄露风险
 import com.ricardo.yuaiagent.advisor.ReReadingAdvisor;
 import com.ricardo.yuaiagent.chatmemory.FileBasedChatMemory;
 import com.ricardo.yuaiagent.rag.InterviewAppRagCustomAdvisorFactory;
 import com.ricardo.yuaiagent.rag.QueryRewriter;
+import com.ricardo.yuaiagent.resume.ResumeStore;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -65,13 +66,27 @@ public class InterviewApp {
         chatClient = ChatClient.builder(dashscopeChatModel)
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
-                        // 自定义日志 Advisor，可按需开启
-                        new MyLoggerAdvisor()
+                        MessageChatMemoryAdvisor.builder(chatMemory).build()
+                        // 日志 Advisor 已移除（隐私红线）：会把完整 prompt/回复（含简历）打印进日志
 //                        // 自定义推理增强 Advisor，可按需开启
 //                       ,new ReReadingAdvisor()
                 )
                 .build();
+    }
+
+    // 简历内存缓存：按 chatId 存储候选人上传的简历文本（纯内存，不落盘）
+    @Resource
+    private ResumeStore resumeStore;
+
+    /**
+     * 组装系统提示词：若当前会话已上传简历，则把简历作为背景信息附加到系统提示词末尾
+     */
+    private String buildSystemPrompt(String chatId) {
+        String resume = resumeStore.get(chatId);
+        if (resume == null || resume.isBlank()) {
+            return SYSTEM_PROMPT;
+        }
+        return SYSTEM_PROMPT + "\n\n【候选人简历背景】\n" + resume;
     }
 
     /**
@@ -84,6 +99,7 @@ public class InterviewApp {
     public String doChat(String message, String chatId) {
         ChatResponse chatResponse = chatClient
                 .prompt()
+                .system(buildSystemPrompt(chatId))
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .call()
@@ -103,6 +119,7 @@ public class InterviewApp {
     public Flux<String> doChatByStream(String message, String chatId) {
         return chatClient
                 .prompt()
+                .system(buildSystemPrompt(chatId))
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .stream()
@@ -123,7 +140,7 @@ public class InterviewApp {
     public InterviewReport doChatWithReport(String message, String chatId) {
         InterviewReport interviewReport = chatClient
                 .prompt()
-                .system(SYSTEM_PROMPT + "面试结束后，输出一份面试评估报告，包含：总评、技术亮点、薄弱项、改进建议")
+                .system(buildSystemPrompt(chatId) + "面试结束后，输出一份面试评估报告，包含：总评、技术亮点、薄弱项、改进建议")
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .call()
@@ -161,8 +178,9 @@ public class InterviewApp {
                 // 使用改写后的查询
                 .user(rewrittenMessage)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                // 开启日志，便于观察效果
-                .advisors(new MyLoggerAdvisor())
+                // 日志 Advisor 已移除（隐私红线，防止简历进日志）
+//                // 开启日志，便于观察效果
+//                .advisors(new MyLoggerAdvisor())
                 // 应用 RAG 知识库问答
                 .advisors(new QuestionAnswerAdvisor(interviewAppVectorStore))
                 // 应用 RAG 检索增强服务（基于云知识库服务）
@@ -198,8 +216,9 @@ public class InterviewApp {
                 .prompt()
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                // 开启日志，便于观察效果
-                .advisors(new MyLoggerAdvisor())
+                // 日志 Advisor 已移除（隐私红线，防止简历进日志）
+//                // 开启日志，便于观察效果
+//                .advisors(new MyLoggerAdvisor())
                 .toolCallbacks(allTools)
                 .call()
                 .chatResponse();
@@ -225,8 +244,9 @@ public class InterviewApp {
                 .prompt()
                 .user(message)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
-                // 开启日志，便于观察效果
-                .advisors(new MyLoggerAdvisor())
+                // 日志 Advisor 已移除（隐私红线，防止简历进日志）
+//                // 开启日志，便于观察效果
+//                .advisors(new MyLoggerAdvisor())
                 .toolCallbacks(toolCallbackProvider)
                 .call()
                 .chatResponse();

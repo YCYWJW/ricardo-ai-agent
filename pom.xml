@@ -146,6 +146,13 @@
             <version>9.1.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- PDF 解析库：从 PDF 文件中抽取文本（简历上传解析用，只收 PDF 格式） -->
+        <!-- https://pdfbox.apache.org/ -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.8</version>
+        </dependency>
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>

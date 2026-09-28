@@ -49,6 +49,15 @@ export const chatWithInterviewApp = (message, chatId) => {
   return connectSSE('/ai/interview_app/chat/sse', { message, chatId })
 }
 
+// 上传简历 PDF（FormData 方式）
+export const uploadResume = (chatId, file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('chatId', chatId)
+  // 用 axios 发送，浏览器会自动带上 multipart/form-data 的边界信息
+  return request.post('/interview/upload', formData)
+}
+
 // AI超级智能体聊天
 export const chatWithManus = (message) => {
   return connectSSE('/ai/manus/chat', { message })
@@ -56,5 +65,6 @@ export const chatWithManus = (message) => {
 
 export default {
   chatWithInterviewApp,
-  chatWithManus
+  chatWithManus,
+  uploadResume
 } 
