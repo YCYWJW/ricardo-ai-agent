@@ -2,7 +2,7 @@
   <div class="home-container">
     <div class="header">
       <div class="glitch-wrapper">
-        <h1 class="glitch-title">李嘉图AI超级智能体</h1>
+        <h1 class="glitch-title">AI智能面试官</h1>
       </div>
       <p class="subtitle">/ 探索AI的无限可能 /</p>
       <div class="cyber-line"></div>
@@ -130,7 +130,7 @@ const navigateTo = (path) => {
 
 .glitch-title::before,
 .glitch-title::after {
-  content: '李嘉图AI超级智能体';
+  content: 'AI智能面试官';
   position: absolute;
   top: 0;
   left: 0;
