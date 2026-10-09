@@ -198,4 +198,3 @@ ricardo-ai-agent/
 
 ## 📄 License
 
-MIT
