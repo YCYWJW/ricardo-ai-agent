@@ -21,7 +21,7 @@
 | 分类 | 技术 |
 |---|---|
 | **后端框架** | Spring Boot 3.4.4 · Spring AI 1.0.0 · Spring AI Alibaba 1.0.0.2 |
-| **AI 模型** | 阿里云百炼 DashScope（qwen-plus）· Ollama（gemma3，可选本地模型） |
+| **AI 模型** | 阿里云百炼 DashScope（qwen-plus） |
 | **向量库** | SimpleVectorStore（内存向量库，启动时自动装载题库，**无需外部数据库**） |
 | **文档处理** | PDFBox（简历解析）· MarkdownDocumentReader（题库装载） |
 | **前端** | Vue 3 · Vite · Vue Router · Axios · SSE（Server-Sent Events） |
@@ -143,6 +143,11 @@ npm run dev
 
 **3. 访问应用**：浏览器打开 **http://localhost:3000**
 
+**接口文档**：后端已集成 Knife4j / Swagger UI，启动后可直接打开在线接口文档：
+
+- Knife4j：http://localhost:8123/api/doc.html
+- Swagger UI：http://localhost:8123/api/swagger-ui.html
+
 ## 🔐 环境变量说明
 
 > 下表只列变量名与用途，**绝不包含任何真实值**。
@@ -150,7 +155,7 @@ npm run dev
 | 变量名 | 用途 | 是否必需 |
 |---|---|---|
 | `DASHSCOPE_API_KEY` | 阿里云百炼（DashScope）API Key，用于大模型对话与知识库向量化 | ✅ 必需 |
-| `search-api.api-key` | 联网搜索工具的 API Key（`application.yml` 中配置），仅在使用搜索工具时需要 | ⬜ 可选 |
+| `SEARCH_API_KEY` | 联网搜索工具（searchapi.io）的 API Key，仅在使用搜索工具时需要 | ⬜ 可选 |
 
 > 请统一使用 [.env.example](.env.example) 中的占位符写法（`your-api-key`），切勿提交真实密钥。
 
@@ -177,7 +182,7 @@ ricardo-ai-agent/
 │   ├── src/components/   ChatRoom.vue（含思考链面板）
 │   ├── nginx.conf
 │   └── Dockerfile
-├── mcp-server/           MCP 服务模块
+├── mcp-server/           预留 MCP 扩展接口（stdio / SSE 双模式）
 ├── Dockerfile            后端多阶段构建
 ├── docker-compose.yml    一键启动编排
 └── .env.example          环境变量模板
@@ -185,7 +190,7 @@ ricardo-ai-agent/
 
 ## 🧭 扩展方向
 
-- **MCP（Model Context Protocol）** — 项目已预留 `mcp-server` 模块与配置，后续可把外部能力（如联网搜索、图片检索）封装为标准 MCP 服务，以 stdio / SSE 双模式接入，让智能体调用任意第三方工具。
+- **MCP（Model Context Protocol）** — 预留 MCP 扩展接口：`mcp-server` 模块已按 stdio / SSE 双模式实现，主项目默认未接入，需要时可打开 `application.yml` 中被注释的 mcp client 配置接上，让智能体调用第三方工具。
 - **可替换的模型服务** — 除阿里云百炼外，项目同时预留了 Ollama 本地模型接入（`gemma3`），可按需切换。
 - **持久化向量库** — 当前使用内存向量库以简化部署；若题库规模增长，可平滑切换到 PgVector 等持久化方案。
 
