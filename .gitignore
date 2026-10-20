@@ -37,3 +37,11 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### 压测产物 ###
+# 运行日志（后端启动日志等），不入库
+*.log
+# Locust 的 CSV 原始数据、监控采样日志、Python 字节码缓存
+# 只提交 stress/ 下的 .py 压测脚本本身，结果文件一律忽略
+stress/*.csv
+__pycache__/
