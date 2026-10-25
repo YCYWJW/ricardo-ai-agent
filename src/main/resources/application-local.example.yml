@@ -1,0 +1,68 @@
+# ============================================================================
+# 本地开发配置模板
+#
+# 【怎么用】
+#   1. 把本文件复制一份，改名为 application-local.yml（去掉 .example）
+#   2. 按下面各段的说明，取消注释并填上你自己机器上的值
+#   3. application-local.yml 已在 .gitignore 里被忽略（见项目根目录 .gitignore），
+#      填了真实密码也不会被提交，可以放心写本地信息
+#   本文件本身只有占位符，会被提交进 Git，方便别人 clone 之后照着填。
+#
+# 【为什么单独要一个 local 文件】
+#   application.yml 里写了 spring.profiles.active=local，
+#   Spring Boot 会自动加载 application-local.yml 并用它覆盖 application.yml 里的同名配置。
+#   于是「大家都一样的默认值」留在 application.yml，
+#   「只有我这台机器才有的值」写在这里，两边互不干扰。
+#
+# 【API Key 放哪 —— 别写进本文件！】
+#   统一放项目根目录的 .env（照抄根目录的 .env.example 即可）。
+#   application.yml 里已经用 ${DASHSCOPE_API_KEY} 这种占位符去引用 .env 的值了。
+#   ⚠️ 千万不要两处都配：Spring Boot 里 yml 的优先级高于 .env，
+#      两边都写会互相覆盖，以后改 Key 只改一处就会出现「明明改了却不生效」的怪事。
+#
+# 【本文件的默认状态】
+#   下面三段全部是注释状态。这样直接复制过去也不会因为占位符而启动失败——
+#   哪一段你真的需要（比如要用 PgVector 了），再把那一段取消注释并填值。
+# ============================================================================
+
+
+# ---------------------------------------------------------------------------
+# 一、PostgreSQL 连接（PgVector 向量库依赖它）
+#     需要本地先跑一个装了 pgvector 扩展的 PostgreSQL，
+#     或者用项目根目录的 docker-compose.yml 起一个。
+# ---------------------------------------------------------------------------
+#spring:
+#  datasource:
+#    url: jdbc:postgresql://localhost:5432/your_database
+#    username: your_username
+#    password: your_password
+
+
+# ---------------------------------------------------------------------------
+# 二、PgVector 向量库参数
+#     这几项通常不用改，照抄即可；维度要和 embedding 模型保持一致。
+# ---------------------------------------------------------------------------
+#spring:
+#  ai:
+#    vectorstore:
+#      pgvector:
+#        index-type: HNSW
+#        dimensions: 1536
+#        distance-type: COSINE_DISTANCE
+#        max-document-batch-size: 10000
+
+
+# ---------------------------------------------------------------------------
+# 三、MCP 客户端连接
+#     需要先在本地把 MCP 服务起起来，端口按你实际启动的改。
+# ---------------------------------------------------------------------------
+#spring:
+#  ai:
+#    mcp:
+#      client:
+#        sse:
+#          connections:
+#            server1:
+#              url: http://localhost:8127
+#        stdio:
+#          servers-configuration: classpath:mcp-servers.json
