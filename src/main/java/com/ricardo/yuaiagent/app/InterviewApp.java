@@ -2,6 +2,7 @@ package com.ricardo.yuaiagent.app;
 
 // import com.ricardo.yuaiagent.advisor.MyLoggerAdvisor; // 已移除：会把完整对话（含简历）打印进日志，存在隐私泄露风险
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ricardo.yuaiagent.advisor.ReReadingAdvisor;
@@ -21,10 +22,12 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -37,6 +40,14 @@ import java.util.stream.Collectors;
 public class InterviewApp {
 
     private final ChatClient chatClient;
+
+    /**
+     * 当前用的是不是本地模型（由配置项 ai.provider 决定，启动时定死）。
+     * <p>
+     * 存成字段是为了后面流式回答时判断「要不要先推一条『本地模型正在思考』的提示」：
+     * 本地 8B 模型每轮要先跑完思考过程才吐第一个字，中间有几秒静默期，不提示前端会看着像卡死。
+     */
+    private final boolean usingLocalModel;
 
     private static final String SYSTEM_PROMPT = """
             你是一位资深 Java 后端面试官，拥有 10 年以上一线互联网大厂的后端研发与面试经验，精通 Java 技术栈、微服务、分布式系统、数据库、缓存与消息中间件。
@@ -100,10 +111,19 @@ public class InterviewApp {
 
     /**
      * 初始化 ChatClient
+     * <p>
+     * 云端和本地两个模型都注入进来，但只在启动时挑一个用来构建 ChatClient（配置驱动，换源重启即可）。
+     * 之所以写具体类型 {@link DashScopeChatModel} / {@link OllamaChatModel} 而不是统一的
+     * {@code ChatModel} 接口：容器里现在同时存在两个 ChatModel bean，写具体类型等于让
+     * 「到底注入了哪两个模型」在编译期就是确定的，不依赖运行时按参数名去猜。
      *
-     * @param dashscopeChatModel
+     * @param dashscopeChatModel 云端模型（阿里云百炼）
+     * @param ollamaChatModel    本地模型（本机 Ollama）
+     * @param provider           模型源开关，取值 deepseek / ollama，默认 deepseek
      */
-    public InterviewApp(ChatModel dashscopeChatModel) {
+    public InterviewApp(DashScopeChatModel dashscopeChatModel,
+                        OllamaChatModel ollamaChatModel,
+                        @Value("${ai.provider:deepseek}") String provider) {
 //        // 初始化基于文件的对话记忆
 //        String fileDir = System.getProperty("user.dir") + "/tmp/chat-memory";
 //        ChatMemory chatMemory = new FileBasedChatMemory(fileDir);
@@ -112,7 +132,13 @@ public class InterviewApp {
                 .chatMemoryRepository(new InMemoryChatMemoryRepository())
                 .maxMessages(20)
                 .build();
-        chatClient = ChatClient.builder(dashscopeChatModel)
+        // 选定模型源：只有明确写了 ollama 才走本地，其它任何值（含拼错）都退回云端，
+        // 免得写错一个字就把整个应用切到本地小模型上
+        this.usingLocalModel = "ollama".equalsIgnoreCase(provider == null ? null : provider.trim());
+        ChatModel chatModel = this.usingLocalModel ? ollamaChatModel : dashscopeChatModel;
+        log.info("面试官模型源已选定：{}（ai.provider={}）",
+                this.usingLocalModel ? "本地 Ollama" : "云端 DashScope", provider);
+        chatClient = ChatClient.builder(chatModel)
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(
                         MessageChatMemoryAdvisor.builder(chatMemory).build()
@@ -239,19 +265,46 @@ public class InterviewApp {
     private Flux<String> buildAnswerStream(String userMessage, String chatId, String extraSystemPrompt) {
         String systemPrompt = buildSystemPrompt(chatId)
                 + (extraSystemPrompt == null ? "" : extraSystemPrompt);
-        return chatClient
+        Flux<String> answerStream = chatClient
                 .prompt()
                 .system(systemPrompt)
                 .user(userMessage)
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, chatId))
                 .stream()
                 .content()
+                // 过滤空片段：本地推理模型（如 deepseek-r1）会先流一段思考过程，
+                // 那段时间的正文是空的，不过滤就会往前端灌一堆空事件
+                .filter(StrUtil::isNotBlank)
                 .map(chunk -> sseEvent("text", chunk))
                 .onErrorResume(e -> {
                     // 只打印异常原因，不打印任何对话/简历内容
                     log.error("流式回答生成失败，chatId={}，原因={}", chatId, e.getMessage());
                     return Flux.just(sseEvent("text", "抱歉，回答生成出现异常，请稍后重试。"));
                 });
+        // 先把「本地模型正在思考」这条提示推出去，再接入模型的输出
+        return Flux.concat(localThinkingNotice(), answerStream);
+    }
+
+    /**
+     * 本地模型专用的「正在思考」提示事件。
+     * <p>
+     * 云端模型基本秒回；本地 8B 模型每轮要先跑完思考过程才吐第一个字。
+     * 2026-10-26 实测（deepseek-r1:8b，完整系统提示词 + 4 篇检索文档）：这条提示 0.96 秒就推出去了，
+     * 而第一个正文字符到 21.77 秒才到——中间近 21 秒 SSE 一条数据都没有，前端看着就像卡死了。
+     * 提示词越短越快（同一模型单独发短提示词约 6 秒），所以这里只说「可能较慢」，不写死秒数。
+     * 解法是复用现有的 thought 事件通道
+     * 先推一条提示出去——前端本来就会把它渲染成思考链上的一步，不需要改前端。
+     * <p>
+     * 隐私说明：这里只推一句固定文案，既不含对话内容，也不含模型的思考原文。
+     * （顺带说明为什么拿不到思考原文：Spring AI 1.0.0 的 Ollama 客户端里压根没有
+     * thinking 这个字段，思考内容在框架层就被丢掉了，拿不到也传不出来。）
+     *
+     * @return 走本地模型时是一条提示事件；走云端时是空流，{@code Flux.concat} 会直接跳过
+     */
+    private Flux<String> localThinkingNotice() {
+        return usingLocalModel
+                ? Flux.just(sseEvent("thought", "当前使用本地大模型，正在思考中（首字生成可能较慢，请稍候）…"))
+                : Flux.empty();
     }
 
     /**

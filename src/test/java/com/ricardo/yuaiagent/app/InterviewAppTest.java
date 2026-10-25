@@ -5,8 +5,8 @@ import jakarta.annotation.Resource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatModel;
 import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -37,9 +37,13 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 class InterviewAppTest {
 
-    // 替换 DashScope 对话模型（按 bean 名精确指定，避免和容器里的 ollamaChatModel 歧义）
+    // 替换 DashScope 对话模型（按 bean 名精确指定，避免和容器里的 ollamaChatModel 歧义）。
+    // 类型必须声明成具体的 DashScopeChatModel：InterviewApp 的构造函数是按具体类型注入的
+    // （容器里同时有两个 ChatModel bean，写具体类型才不会注错），
+    // 这里若还写成接口 ChatModel，生成的 Mock 不是 DashScopeChatModel，注入时会直接失败。
+    // 本地那个 ollamaChatModel 不用替换：走云端分支时它自始至终不会被调用。
     @MockitoBean(name = "dashscopeChatModel")
-    private ChatModel dashscopeChatModel;
+    private DashScopeChatModel dashscopeChatModel;
 
     // 替换向量库，让 Spring 跳过启动时的向量化（35 次关键词 + 35 次 embedding），绝不烧 token
     @MockitoBean(name = "interviewAppVectorStore")

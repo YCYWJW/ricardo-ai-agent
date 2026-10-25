@@ -23,9 +23,11 @@ spring:
         options:
           model: qwen-plus
     ollama:
+      # 本地 Ollama 服务地址（默认端口 11434），改这里就不用改端口
       base-url: http://localhost:11434
       chat:
-        model: gemma3:1b
+        # 本地对话模型名，必须和 `ollama list` 里显示的完全一致
+        model: deepseek-r1:8b
 # 临时注释掉，便于大家开发调试和部署（实际需要启动 MCP 服务）
 #    mcp:
 #      client:
@@ -42,6 +44,19 @@ spring:
 #        dimensions: 1536
 #        distance-type: COSINE_DISTANCE
 #        max-document-batch-size: 10000 # Optional: Maximum number of documents per batch
+# ============================================================================
+# 模型源选择：决定面试官用哪个大模型
+#   deepseek = 云端（阿里云百炼 DashScope，模型见上面 spring.ai.dashscope，回答快、质量高）
+#   ollama   = 本地（本机 Ollama，模型见上面 spring.ai.ollama，不花钱、断网也能用、但慢）
+#
+# 写法说明：这里写成 ${AI_PROVIDER:deepseek}，冒号后面是「读不到就用它」的默认值。
+# 于是有两种切换方式，都不用改代码：
+#   ① 只改本文件这一行；
+#   ② 在根目录 .env 里加一行 AI_PROVIDER=ollama（推荐，本文件就保持默认不动）。
+# 注意 ai 是顶层配置，和上面的 spring.ai 不是同一个东西，别写混了。
+# ============================================================================
+ai:
+  provider: ${AI_PROVIDER:deepseek}
 server:
   port: 8123
   servlet:
